@@ -1,265 +1,229 @@
 import os
 import re
-import smtplib
-from email.message import EmailMessage
+import requests
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
-# =========================================================
-# LOAD ENVIRONMENT VARIABLES
-# =========================================================
-
 load_dotenv()
-
-
-# =========================================================
-# CREATE FLASK APP
-# =========================================================
 
 app = Flask(__name__)
 
-
-# =========================================================
-# CORS CONFIGURATION
-# Allows local testing and GitHub Pages
-# =========================================================
-# =========================================================
-# CORS CONFIGURATION
-# =========================================================
+# --------------------------------------------------
+# CORS
+# --------------------------------------------------
 
 CORS(
     app,
     resources={
         r"/send-message": {
             "origins": [
-                "http://127.0.0.1:5500",
-                "http://localhost:5500",
-                "http://127.0.0.1:5501",
-                "http://localhost:5501",
-                "http://127.0.0.1:5502",
-                "http://localhost:5502",
                 "https://hariomkumar18.github.io",
+                "http://127.0.0.1:5500",
+                "http://localhost:5500"
             ]
         }
-    },
+    }
 )
 
+# --------------------------------------------------
+# Brevo Configuration
+# --------------------------------------------------
 
-# =========================================================
-# GMAIL SMTP CONFIGURATION
-# =========================================================
-
-SMTP_SERVER = "smtp.gmail.com"
-SMTP_PORT = 587
-
-EMAIL_USER = os.getenv("EMAIL_USER")
-EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
+BREVO_API_KEY = os.getenv("BREVO_API_KEY")
+BREVO_SENDER_EMAIL = os.getenv("BREVO_SENDER_EMAIL")
 EMAIL_TO = os.getenv("EMAIL_TO")
 
+BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
 
-# =========================================================
-# EMAIL VALIDATION
-# =========================================================
+
+# --------------------------------------------------
+# Email Validation
+# --------------------------------------------------
 
 def is_valid_email(email):
     pattern = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
     return re.match(pattern, email) is not None
 
-# =========================================================
-# HOME ROUTE
-# =========================================================
 
+# --------------------------------------------------
+# Home
+# --------------------------------------------------
 
 @app.route("/", methods=["GET"])
 def home():
+    return jsonify({
+        "status": "online",
+        "service": "Hari Om Kumar Portfolio Contact API"
+    })
 
-    return jsonify(
-        {"status": "online", "service": "Hari Om Kumar Portfolio Contact API"}
-    )
 
-
-# =========================================================
-# CONTACT FORM API
-# =========================================================
-
+# --------------------------------------------------
+# Send Contact Message
+# --------------------------------------------------
 
 @app.route("/send-message", methods=["POST"])
 def send_message():
 
-    # -----------------------------------------------------
-    # Check request format
-    # -----------------------------------------------------
+    try:
+        data = request.get_json()
 
-    if not request.is_json:
-        return jsonify({"success": False, "message": "Invalid request format."}), 400
+        if not data:
+            return jsonify({
+                "success": False,
+                "message": "No data received."
+            }), 400
 
-    data = request.get_json()
+        name = data.get("name", "").strip()
+        email = data.get("email", "").strip()
+        message = data.get("message", "").strip()
 
-    # -----------------------------------------------------
-    # Get form data
-    # -----------------------------------------------------
+        # Validate name
+        if not name:
+            return jsonify({
+                "success": False,
+                "message": "Name is required."
+            }), 400
 
-    name = str(data.get("name", "")).strip()
+        # Validate email
+        if not email:
+            return jsonify({
+                "success": False,
+                "message": "Email is required."
+            }), 400
 
-    visitor_email = str(data.get("email", "")).strip()
+        if not is_valid_email(email):
+            return jsonify({
+                "success": False,
+                "message": "Please enter a valid email address."
+            }), 400
 
-    message = str(data.get("message", "")).strip()
+        # Validate message
+        if not message:
+            return jsonify({
+                "success": False,
+                "message": "Message is required."
+            }), 400
 
-    # -----------------------------------------------------
-    # Validate name
-    # -----------------------------------------------------
+        # Check Brevo configuration
+        if not BREVO_API_KEY:
+            print("ERROR: BREVO_API_KEY is missing")
+            return jsonify({
+                "success": False,
+                "message": "Email service is not configured."
+            }), 500
 
-    if not name:
-        return jsonify({"success": False, "message": "Please enter your name."}), 400
+        if not BREVO_SENDER_EMAIL:
+            print("ERROR: BREVO_SENDER_EMAIL is missing")
+            return jsonify({
+                "success": False,
+                "message": "Sender email is not configured."
+            }), 500
 
-    if len(name) > 100:
-        return jsonify({"success": False, "message": "Name is too long."}), 400
+        if not EMAIL_TO:
+            print("ERROR: EMAIL_TO is missing")
+            return jsonify({
+                "success": False,
+                "message": "Recipient email is not configured."
+            }), 500
 
-    # -----------------------------------------------------
-    # Validate email
-    # -----------------------------------------------------
+        # --------------------------------------------------
+        # Create email
+        # --------------------------------------------------
 
-    if not visitor_email:
-        return jsonify({"success": False, "message": "Please enter your email."}), 400
+        subject = f"New Portfolio Message from {name}"
 
-    if not is_valid_email(visitor_email):
-        return jsonify(
-            {"success": False, "message": "Please enter a valid email address."}
-        ), 400
-
-    # -----------------------------------------------------
-    # Validate message
-    # -----------------------------------------------------
-
-    if not message:
-        return jsonify({"success": False, "message": "Please enter your message."}), 400
-
-    if len(message) > 5000:
-        return jsonify({"success": False, "message": "Message is too long."}), 400
-
-    # -----------------------------------------------------
-    # Check email configuration
-    # -----------------------------------------------------
-
-    if not EMAIL_USER:
-        print("ERROR: EMAIL_USER is missing.")
-
-        return jsonify(
-            {"success": False, "message": "Email sender is not configured."}
-        ), 500
-
-    if not EMAIL_PASSWORD:
-        print("ERROR: EMAIL_PASSWORD is missing.")
-
-        return jsonify(
-            {"success": False, "message": "Gmail App Password is not configured."}
-        ), 500
-
-    if not EMAIL_TO:
-        print("ERROR: EMAIL_TO is missing.")
-
-        return jsonify(
-            {"success": False, "message": "Email receiver is not configured."}
-        ), 500
-
-    # =====================================================
-    # CREATE EMAIL
-    # =====================================================
-
-    email = EmailMessage()
-
-    email["Subject"] = f"New Portfolio Message from {name}"
-
-    email["From"] = EMAIL_USER
-
-    email["To"] = EMAIL_TO
-
-    email["Reply-To"] = visitor_email
-
-    email.set_content(
-        f"""New message received from your portfolio website.
+        text_content = f"""
+You received a new message from your portfolio website.
 
 Name:
 {name}
 
-Visitor Email:
-{visitor_email}
+Email:
+{email}
 
 Message:
 {message}
 
 --------------------------------
-Hari Om Kumar
-Portfolio Website
+Hari Om Kumar Portfolio
 """
-    )
 
-    # =====================================================
-    # SEND EMAIL USING GMAIL SMTP
-    # =====================================================
+        payload = {
+            "sender": {
+                "name": "Hari Om Kumar Portfolio",
+                "email": BREVO_SENDER_EMAIL
+            },
+            "to": [
+                {
+                    "email": EMAIL_TO,
+                    "name": "Hari Om Kumar"
+                }
+            ],
+            "replyTo": {
+                "email": email,
+                "name": name
+            },
+            "subject": subject,
+            "textContent": text_content
+        }
 
-    try:
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=30) as server:
-            server.ehlo()
+        headers = {
+            "accept": "application/json",
+            "api-key": BREVO_API_KEY,
+            "content-type": "application/json"
+        }
 
-            server.starttls()
+        # --------------------------------------------------
+        # Send through Brevo HTTPS API
+        # --------------------------------------------------
 
-            server.ehlo()
+        response = requests.post(
+            BREVO_API_URL,
+            headers=headers,
+            json=payload,
+            timeout=30
+        )
 
-            server.login(EMAIL_USER, EMAIL_PASSWORD)
+        print("Brevo Status:", response.status_code)
 
-            server.send_message(email)
+        if response.status_code in [200, 201, 202]:
 
-        print(f"Email successfully sent from {visitor_email}")
+            return jsonify({
+                "success": True,
+                "message": "Your message has been sent successfully!"
+            }), 200
 
-        return jsonify(
-            {"success": True, "message": "Your message has been sent successfully!"}
-        ), 200
+        print("Brevo Error:", response.text)
 
-    # -----------------------------------------------------
-    # Gmail authentication error
-    # -----------------------------------------------------
+        return jsonify({
+            "success": False,
+            "message": "Unable to send your message."
+        }), 500
 
-    except smtplib.SMTPAuthenticationError:
-        print("ERROR: Gmail authentication failed.")
+    except requests.exceptions.RequestException as error:
 
-        return jsonify(
-            {
-                "success": False,
-                "message": (
-                    "Gmail authentication failed. Please check your Gmail App Password."
-                ),
-            }
-        ), 500
+        print("Brevo connection error:", error)
 
-    # -----------------------------------------------------
-    # SMTP error
-    # -----------------------------------------------------
+        return jsonify({
+            "success": False,
+            "message": "Could not connect to the email service."
+        }), 500
 
-    except smtplib.SMTPException as error:
-        print(f"SMTP ERROR: {error}")
+    except Exception as error:
 
-        return jsonify(
-            {"success": False, "message": ("Gmail could not send the message.")}
-        ), 500
+        print("Unexpected error:", error)
 
-    # -----------------------------------------------------
-    # Network error
-    # -----------------------------------------------------
-
-    except OSError as error:
-        print(f"NETWORK ERROR: {error}")
-
-        return jsonify(
-            {"success": False, "message": ("Could not connect to Gmail.")}
-        ), 500
+        return jsonify({
+            "success": False,
+            "message": "An unexpected error occurred."
+        }), 500
 
 
-# =========================================================
-# START FLASK SERVER
-# =========================================================
+# --------------------------------------------------
+# Local Development
+# --------------------------------------------------
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=False)
+    app.run(debug=True)
