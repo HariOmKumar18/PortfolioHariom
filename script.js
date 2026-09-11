@@ -5,15 +5,14 @@
 
 "use strict";
 
+
 /* =========================================================
    DOM READY
 ========================================================= */
 
 document.addEventListener("DOMContentLoaded", () => {
 
-    /* ---------------------------------------------------------
-       Enable JavaScript-dependent animations
-    --------------------------------------------------------- */
+    /* Enable JavaScript-dependent animations */
 
     document.documentElement.classList.add("js-enabled");
 
@@ -22,9 +21,14 @@ document.addEventListener("DOMContentLoaded", () => {
        01. ELEMENTS
     ========================================================= */
 
-    const header = document.querySelector(".site-header");
-    const menuButton = document.getElementById("menuButton");
-    const navLinks = document.getElementById("navLinks");
+    const header =
+        document.querySelector(".site-header");
+
+    const menuButton =
+        document.getElementById("menuButton");
+
+    const navLinks =
+        document.getElementById("navLinks");
 
     const navigationLinks =
         document.querySelectorAll(".nav-links a");
@@ -131,6 +135,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     "aria-label",
                     "Open navigation menu"
                 );
+
             }
 
         });
@@ -175,7 +180,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const updateActiveNavigation = () => {
 
-        if (!sections.length || !navigationLinks.length) {
+        if (
+            !sections.length ||
+            !navigationLinks.length
+        ) {
             return;
         }
 
@@ -290,13 +298,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
     /* =========================================================
        06. CONTACT FORM
+       REAL FLASK BACKEND CONNECTION
     ========================================================= */
 
     if (contactForm) {
 
         contactForm.addEventListener(
             "submit",
-            event => {
+            async event => {
 
                 event.preventDefault();
 
@@ -310,13 +319,25 @@ document.addEventListener("DOMContentLoaded", () => {
                 const messageInput =
                     document.getElementById("message");
 
+                const submitButton =
+                    contactForm.querySelector(
+                        'button[type="submit"]'
+                    );
+
 
                 if (
                     !nameInput ||
                     !emailInput ||
-                    !messageInput
+                    !messageInput ||
+                    !submitButton
                 ) {
+
+                    console.error(
+                        "Contact form elements are missing."
+                    );
+
                     return;
+
                 }
 
 
@@ -330,11 +351,15 @@ document.addEventListener("DOMContentLoaded", () => {
                     messageInput.value.trim();
 
 
-                /* Basic validation */
+                /* -----------------------------------------
+                   Required field validation
+                ----------------------------------------- */
 
                 if (!name) {
 
-                    alert("Please enter your name.");
+                    alert(
+                        "Please enter your name."
+                    );
 
                     nameInput.focus();
 
@@ -345,7 +370,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 if (!email) {
 
-                    alert("Please enter your email.");
+                    alert(
+                        "Please enter your email."
+                    );
 
                     emailInput.focus();
 
@@ -356,7 +383,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 if (!message) {
 
-                    alert("Please enter your message.");
+                    alert(
+                        "Please enter your message."
+                    );
 
                     messageInput.focus();
 
@@ -365,7 +394,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
 
 
-                /* Email validation */
+                /* -----------------------------------------
+                   Email validation
+                ----------------------------------------- */
 
                 const emailPattern =
                     /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -384,43 +415,147 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
 
 
-                /* Create email content */
+                /* -----------------------------------------
+                   Prevent oversized input
+                ----------------------------------------- */
 
-                const subject =
-                    encodeURIComponent(
-                        `Portfolio Contact — ${name}`
+                if (name.length > 100) {
+
+                    alert(
+                        "Name is too long."
+                    );
+
+                    nameInput.focus();
+
+                    return;
+
+                }
+
+
+                if (message.length > 5000) {
+
+                    alert(
+                        "Message is too long."
+                    );
+
+                    messageInput.focus();
+
+                    return;
+
+                }
+
+
+                /* -----------------------------------------
+                   Flask backend URL
+
+                   This is the REAL local backend
+                   we are testing right now.
+                ----------------------------------------- */
+
+                const API_URL =
+                    "http://127.0.0.1:5000/send-message";
+
+
+                /* -----------------------------------------
+                   Disable button while sending
+                ----------------------------------------- */
+
+                const originalButtonText =
+                    submitButton.textContent;
+
+                submitButton.disabled = true;
+
+                submitButton.textContent =
+                    "Sending...";
+
+
+                try {
+
+                    /* -------------------------------------
+                       Send form data to Flask backend
+                    ------------------------------------- */
+
+                    const response =
+                        await fetch(
+                            API_URL,
+                            {
+                                method: "POST",
+
+                                headers: {
+                                    "Content-Type":
+                                        "application/json"
+                                },
+
+                                body: JSON.stringify({
+                                    name: name,
+                                    email: email,
+                                    message: message
+                                })
+                            }
+                        );
+
+
+                    /* -------------------------------------
+                       Read backend response
+                    ------------------------------------- */
+
+                    const result =
+                        await response.json();
+
+
+                    /* -------------------------------------
+                       Backend rejected the request
+                    ------------------------------------- */
+
+                    if (
+                        !response.ok ||
+                        !result.success
+                    ) {
+
+                        throw new Error(
+                            result.message ||
+                            "Unable to send message."
+                        );
+
+                    }
+
+
+                    /* -------------------------------------
+                       Email was actually accepted
+                       by the backend.
+                    ------------------------------------- */
+
+                    alert(
+                        "Your message has been sent successfully!"
                     );
 
 
-                const body =
-                    encodeURIComponent(
-`Hello Hari,
+                    contactForm.reset();
 
-You received a new message from your portfolio website.
 
-Name: ${name}
-Email: ${email}
+                } catch (error) {
 
-Message:
-${message}
-
-Regards,
-${name}`
+                    console.error(
+                        "Contact form error:",
+                        error
                     );
 
 
-                /*
-                    Opens the visitor's default email application.
-
-                    Replace the email address below if required.
-                */
-
-                const destination =
-                    "hariomkumar040507@gmail.com";
+                    alert(
+                        "Unable to send your message. " +
+                        "Please try again."
+                    );
 
 
-                window.location.href =
-                    `mailto:${destination}?subject=${subject}&body=${body}`;
+                } finally {
+
+                    submitButton.disabled =
+                        false;
+
+                    submitButton.textContent =
+                        originalButtonText;
+
+                }
 
             }
         );
@@ -455,11 +590,14 @@ ${name}`
                     const targetId =
                         link.getAttribute("href");
 
+
                     if (
                         !targetId ||
                         targetId === "#"
                     ) {
+
                         return;
+
                     }
 
 
@@ -470,7 +608,9 @@ ${name}`
 
 
                     if (!target) {
+
                         return;
+
                     }
 
 
@@ -597,13 +737,14 @@ ${name}`
                     "menu-open"
                 );
 
+
                 if (menuButton) {
 
                     menuButton.setAttribute(
                         "aria-expanded",
                         "false"
                     );
-
+const API_URL = "https://portfoliohariom.onrender.com/send-message";
                     menuButton.setAttribute(
                         "aria-label",
                         "Open navigation menu"
@@ -621,6 +762,8 @@ ${name}`
        13. PAGE LOADED
     ========================================================= */
 
-    document.body.classList.add("page-loaded");
+    document.body.classList.add(
+        "page-loaded"
+    );
 
 });
