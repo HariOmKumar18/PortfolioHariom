@@ -452,9 +452,7 @@ document.addEventListener("DOMContentLoaded", () => {
                    we are testing right now.
                 ----------------------------------------- */
 
-                const API_URL =
-                    "http://127.0.0.1:5000/send-message";
-
+                const API_URL = "https://portfoliohariom.onrender.com/send-message";
 
                 /* -----------------------------------------
                    Disable button while sending
